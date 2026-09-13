@@ -1,0 +1,21 @@
+# Extends the stock gitleaks ruleset; adds only what this repository needs.
+[extend]
+useDefault = true
+
+# Narrow allowlists for values that appear in lab reports as evidence.
+#
+# condition = "AND" matters: with the default OR, listing `paths` alone would
+# allowlist the WHOLE file — the path exclusion this lab warns about, wearing an
+# allowlist's clothes. With AND, a finding is ignored only if it is in that file
+# AND matches that exact literal.
+[[allowlists]]
+description = "Lab 3 evidence: the fake GitHub PAT the spec tells us to plant, quoted verbatim"
+condition = "AND"
+paths = ['''submissions/lab3\.md''']
+regexes = ['''ghp_16C7e42F292c6912E7710c838347Ae178B4a''']
+
+[[allowlists]]
+description = "Lab 3 evidence: the SSH key fingerprint printed by git log --show-signature (a fingerprint, not a key)"
+condition = "AND"
+paths = ['''submissions/lab3\.md''']
+regexes = ['''BzBwmOVJ2rjldL1oS/Pb2fqfuvf18V/77\+g32bD4qGU''']
