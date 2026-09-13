@@ -1,0 +1,471 @@
+threagile_version: 1.0.0
+
+title: Juice Shop Auth Flow
+
+date: 2026-09-13
+
+author:
+  name: Ekaterina Ivanova
+  homepage: https://github.com/ivanovvaak
+
+management_summary_comment: >
+  Feature-level model of the Juice Shop login path only: the browser, the login
+  endpoint, the token service that issues and verifies the JWT, the credential
+  store behind it, the secret store holding the signing key, and one admin
+  endpoint that is supposed to be reachable only with an administrative claim.
+  The architecture model in threagile-model.yaml treats the whole application as
+  one box; this model opens that box for a single feature.
+
+business_criticality: critical
+
+business_overview:
+  description: >
+    Authentication is the control every other control in the shop depends on:
+    order history, basket contents and the administration area are all gated by
+    the token this flow issues.
+  images: []
+
+technical_overview:
+  description: >
+    Credentials are posted to the login endpoint, checked against the credential
+    store, and exchanged for a JWT signed with a key held in a secret store. The
+    admin endpoint verifies that token and the role claim inside it on every call.
+  images: []
+
+questions:
+  Is the JWT signing key rotated, and how fast can it be rotated?: ""
+  Are failed logins rate-limited per account and per source address?: ""
+
+abuse_cases:
+  Credential stuffing: >
+    An attacker replays a breach corpus against the login endpoint and keeps the
+    accounts that answer with a token.
+  Signing key theft: >
+    An attacker who reads the signing key mints tokens for any account, including
+    an administrative one, without ever touching the credential store.
+  Forged admin claim: >
+    An attacker edits the role claim of their own valid token and calls the admin
+    endpoint, hoping the endpoint trusts the claim without verifying the signature.
+
+security_requirements:
+  Signature verification: Every token is signature-verified on every request, with a fixed algorithm.
+  Credential storage: Passwords are stored only as salted, memory-hard hashes.
+  Admin authorisation: The admin endpoint performs its own role check server-side, not in the client.
+
+tags_available:
+  - jwt
+  - auth
+  - docker
+
+data_assets:
+
+  User Credentials:
+    id: user-credentials
+    description: E-mail and password submitted at login and the password hashes stored for them.
+    usage: business
+    tags:
+      - auth
+    origin: End user
+    owner: Lab Owner
+    quantity: many
+    confidentiality: strictly-confidential
+    integrity: critical
+    availability: important
+    justification_cia_rating: A leaked credential set is directly reusable against this and other systems.
+
+  JWT Signing Key:
+    id: jwt-signing-key
+    description: Private key used to sign issued JWTs and to verify them on every subsequent request.
+    usage: business
+    tags:
+      - jwt
+    origin: Lab Owner
+    owner: Lab Owner
+    quantity: very-few
+    confidentiality: strictly-confidential
+    integrity: mission-critical
+    availability: critical
+    justification_cia_rating: Whoever holds this key is every user, including the administrator.
+
+  Session Tokens:
+    id: session-tokens
+    description: Issued JWTs carrying the subject and the role claim.
+    usage: business
+    tags:
+      - jwt
+    origin: Token Service
+    owner: Lab Owner
+    quantity: many
+    confidentiality: confidential
+    integrity: critical
+    availability: important
+    justification_cia_rating: A stolen token is a live session until it expires.
+
+  User Profile:
+    id: user-profile
+    description: Account attributes returned after a successful login.
+    usage: business
+    tags: []
+    origin: End user
+    owner: Lab Owner
+    quantity: many
+    confidentiality: internal
+    integrity: important
+    availability: operational
+    justification_cia_rating: Personal data, but not directly reusable as a credential.
+
+  Admin Audit Log:
+    id: admin-audit-log
+    description: Record of administrative actions and of the identity that performed them.
+    usage: devops
+    tags: []
+    origin: Admin Endpoint
+    owner: Lab Owner
+    quantity: many
+    confidentiality: restricted
+    integrity: critical
+    availability: important
+    justification_cia_rating: This is the evidence trail; if it can be edited, nothing else can be proven.
+
+technical_assets:
+
+  User Browser:
+    id: user-browser
+    description: End-user browser driving the login form and the admin screens.
+    type: external-entity
+    usage: business
+    used_as_client_by_human: true
+    out_of_scope: false
+    justification_out_of_scope:
+    size: system
+    technology: browser
+    tags:
+      - auth
+    internet: true
+    machine: virtual
+    encryption: none
+    owner: External User
+    confidentiality: public
+    integrity: operational
+    availability: operational
+    justification_cia_rating: Fully controlled by the end user, who may be the attacker.
+    multi_tenant: false
+    redundant: false
+    custom_developed_parts: false
+    data_assets_processed:
+      - user-credentials
+      - session-tokens
+    data_assets_stored:
+      - session-tokens
+    data_formats_accepted:
+      - json
+    communication_links:
+      Submit Login:
+        target: login-endpoint
+        description: Browser posts e-mail and password to the login endpoint.
+        protocol: https
+        authentication: credentials
+        authorization: enduser-identity-propagation
+        tags:
+          - auth
+        vpn: false
+        ip_filtered: false
+        readonly: false
+        usage: business
+        data_assets_sent:
+          - user-credentials
+        data_assets_received:
+          - session-tokens
+          - user-profile
+      Call Admin API:
+        target: admin-endpoint
+        description: Browser calls the administration API carrying the issued JWT.
+        protocol: https
+        authentication: token
+        authorization: enduser-identity-propagation
+        tags:
+          - jwt
+        vpn: false
+        ip_filtered: false
+        readonly: false
+        usage: business
+        data_assets_sent:
+          - session-tokens
+        data_assets_received:
+          - user-profile
+
+  Login Endpoint:
+    id: login-endpoint
+    description: REST endpoint that accepts credentials, verifies them and asks for a token.
+    type: process
+    usage: business
+    used_as_client_by_human: false
+    out_of_scope: false
+    justification_out_of_scope:
+    size: component
+    technology: web-service-rest
+    tags:
+      - auth
+    internet: false
+    machine: container
+    encryption: transparent
+    owner: Lab Owner
+    confidentiality: confidential
+    integrity: critical
+    availability: important
+    justification_cia_rating: Sees every password in cleartext for the duration of the request.
+    multi_tenant: false
+    redundant: false
+    custom_developed_parts: true
+    data_assets_processed:
+      - user-credentials
+      - session-tokens
+      - user-profile
+    data_assets_stored: []
+    data_formats_accepted:
+      - json
+    communication_links:
+      Verify Credentials:
+        target: credential-store
+        description: Look the account up and compare the password hash.
+        protocol: sql-access-protocol-encrypted
+        authentication: credentials
+        authorization: technical-user
+        tags:
+          - auth
+        vpn: false
+        ip_filtered: true
+        readonly: true
+        usage: business
+        data_assets_sent:
+          - user-credentials
+        data_assets_received:
+          - user-credentials
+          - user-profile
+      Request Token:
+        target: token-service
+        description: Ask the token service to mint a JWT for the authenticated subject.
+        protocol: https
+        authentication: client-certificate
+        authorization: technical-user
+        tags:
+          - jwt
+        vpn: false
+        ip_filtered: true
+        readonly: false
+        usage: business
+        data_assets_sent:
+          - user-profile
+        data_assets_received:
+          - session-tokens
+
+  Token Service:
+    id: token-service
+    description: Signs new JWTs and verifies presented ones against the signing key.
+    type: process
+    usage: business
+    used_as_client_by_human: false
+    out_of_scope: false
+    justification_out_of_scope:
+    size: component
+    technology: identity-provider
+    tags:
+      - jwt
+    internet: false
+    machine: container
+    encryption: transparent
+    owner: Lab Owner
+    confidentiality: strictly-confidential
+    integrity: mission-critical
+    availability: critical
+    justification_cia_rating: Holds the signing key in memory; compromise means arbitrary identity.
+    multi_tenant: false
+    redundant: false
+    custom_developed_parts: true
+    data_assets_processed:
+      - session-tokens
+      - jwt-signing-key
+      - user-profile
+    data_assets_stored: []
+    data_formats_accepted:
+      - json
+    communication_links:
+      Fetch Signing Key:
+        target: secret-store
+        description: Read the JWT signing key from the secret store at startup and on rotation.
+        protocol: https
+        authentication: client-certificate
+        authorization: technical-user
+        tags:
+          - jwt
+        vpn: false
+        ip_filtered: true
+        readonly: true
+        usage: devops
+        data_assets_sent: []
+        data_assets_received:
+          - jwt-signing-key
+
+  Credential Store:
+    id: credential-store
+    description: Database table holding accounts, password hashes and roles.
+    type: datastore
+    usage: business
+    used_as_client_by_human: false
+    out_of_scope: false
+    justification_out_of_scope:
+    size: component
+    technology: identity-store-database
+    tags:
+      - auth
+    internet: false
+    machine: container
+    encryption: data-with-symmetric-shared-key
+    owner: Lab Owner
+    confidentiality: strictly-confidential
+    integrity: critical
+    availability: important
+    justification_cia_rating: The single place where every account's secret material lives.
+    multi_tenant: false
+    redundant: false
+    custom_developed_parts: false
+    data_assets_processed: []
+    data_assets_stored:
+      - user-credentials
+      - user-profile
+    data_formats_accepted:
+      - json
+    communication_links: {}
+
+  Secret Store:
+    id: secret-store
+    description: Vault holding the JWT signing key, separate from the application image.
+    type: datastore
+    usage: devops
+    used_as_client_by_human: false
+    out_of_scope: false
+    justification_out_of_scope:
+    size: component
+    technology: vault
+    tags:
+      - jwt
+    internet: false
+    machine: container
+    encryption: data-with-asymmetric-shared-key
+    owner: Lab Owner
+    confidentiality: strictly-confidential
+    integrity: mission-critical
+    availability: critical
+    justification_cia_rating: Custodian of the one secret that forges any identity in the system.
+    multi_tenant: false
+    redundant: false
+    custom_developed_parts: false
+    data_assets_processed: []
+    data_assets_stored:
+      - jwt-signing-key
+    data_formats_accepted:
+      - json
+    communication_links: {}
+
+  Admin Endpoint:
+    id: admin-endpoint
+    description: Administration API; every call is gated by a server-side role check on the verified token.
+    type: process
+    usage: business
+    used_as_client_by_human: false
+    out_of_scope: false
+    justification_out_of_scope:
+    size: component
+    technology: web-service-rest
+    tags:
+      - auth
+    internet: false
+    machine: container
+    encryption: transparent
+    owner: Lab Owner
+    confidentiality: restricted
+    integrity: critical
+    availability: important
+    justification_cia_rating: Exposes every account and order to whoever passes its role check.
+    multi_tenant: false
+    redundant: false
+    custom_developed_parts: true
+    data_assets_processed:
+      - session-tokens
+      - user-profile
+      - admin-audit-log
+    data_assets_stored:
+      - admin-audit-log
+    data_formats_accepted:
+      - json
+    communication_links:
+      Verify Token And Role:
+        target: token-service
+        description: >
+          Authorisation check: the admin endpoint sends the presented JWT to the token
+          service, which verifies the signature and returns the role claim. The endpoint
+          refuses the call unless that claim is the administrative one, so authorization
+          is technical-user here and the decision is made server-side.
+        protocol: https
+        authentication: token
+        authorization: technical-user
+        tags:
+          - jwt
+        vpn: false
+        ip_filtered: true
+        readonly: true
+        usage: business
+        data_assets_sent:
+          - session-tokens
+        data_assets_received:
+          - user-profile
+
+trust_boundaries:
+
+  Public Internet:
+    id: public-internet
+    description: Untrusted network the browser sits on.
+    type: network-dedicated-hoster
+    tags: []
+    technical_assets_inside:
+      - user-browser
+    trust_boundaries_nested:
+      - app-network
+
+  Application Network:
+    id: app-network
+    description: Container network carrying the login and admin endpoints.
+    type: network-policy-namespace-isolation
+    tags: []
+    technical_assets_inside:
+      - login-endpoint
+      - admin-endpoint
+      - token-service
+    trust_boundaries_nested:
+      - secret-network
+
+  Secret Network:
+    id: secret-network
+    description: Isolated segment for credential and key storage.
+    type: network-policy-namespace-isolation
+    tags: []
+    technical_assets_inside:
+      - credential-store
+      - secret-store
+    trust_boundaries_nested: []
+
+shared_runtimes:
+
+  Auth Runtime:
+    id: auth-runtime
+    description: Docker engine running the authentication components.
+    tags:
+      - docker
+    technical_assets_running:
+      - login-endpoint
+      - admin-endpoint
+      - token-service
+
+individual_risk_categories: {}
+
+risk_tracking: {}
