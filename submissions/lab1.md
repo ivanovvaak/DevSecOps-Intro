@@ -122,7 +122,11 @@ The container and the `bkimminich/juice-shop:v20.0.0` image stay on disk; Labs 4
   - `No secrets or large temp files committed`
   - `submissions/labN.md exists`
 
-Auto-fill evidence: <!-- TODO: paste the draft-PR link here after pushing `feature/lab1` and opening the draft PR; the description box must already show the four headings and three checklist items before typing anything. -->
+Submission PR (course repo): https://github.com/inno-devops-labs/DevSecOps-Intro/pull/1691
+
+Auto-fill evidence: the course repository ships no `.github/PULL_REQUEST_TEMPLATE.md`, and GitHub resolves the template from the **base** repository of a PR, not from the head fork. A PR opened against `inno-devops-labs:main` therefore cannot demonstrate my template. The demo PR below is opened inside my own fork, where `main` now carries the template, so the description box is pre-filled before I type anything:
+
+<!-- demo-pr -->
 
 ## GitHub community
 
