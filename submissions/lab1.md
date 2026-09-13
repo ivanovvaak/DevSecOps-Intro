@@ -126,7 +126,7 @@ Submission PR (course repo): https://github.com/inno-devops-labs/DevSecOps-Intro
 
 Auto-fill evidence: the course repository ships no `.github/PULL_REQUEST_TEMPLATE.md`, and GitHub resolves the template from the **base** repository of a PR, not from the head fork. A PR opened against `inno-devops-labs:main` therefore cannot demonstrate my template. The demo PR below is opened inside my own fork, where `main` now carries the template, so the description box is pre-filled before I type anything:
 
-<!-- demo-pr -->
+**https://github.com/ivanovvaak/DevSecOps-Intro/pull/1** — opened from `feature/lab1` into `main` of my fork. The description shown there is the template, pre-filled by GitHub with the four headings (Goal, Changes, Testing, Artifacts & Screenshots) and the three checklist items, before any typing.
 
 ## GitHub community
 
@@ -183,12 +183,14 @@ jobs:
         run: curl --silent --fail http://localhost:3000/rest/admin/application-version
 ```
 
-- **Run URL:** <!-- TODO: paste the green run URL after pushing and opening the draft PR -->
-- **Run duration:** <!-- TODO: paste from the run summary -->
-- **curl output excerpt from the job log:** <!-- TODO: paste the `{"version":"20.0.0"}` line and the `Juice Shop is up after Ns` line -->
-
-Locally the same poll against the same image tag produced:
+- **Run URL:** https://github.com/ivanovvaak/DevSecOps-Intro/actions/runs/34767648788 — conclusion `success`
+- **Run duration:** 21 s (started 2026-09-13T16:07:47Z, finished 2026-09-13T16:08:08Z); the service container answered on the 3rd poll
+- **curl output excerpt from the job log:**
 
 ```
-{"version":"20.0.0"}
+2026-09-13T16:08:05.6881870Z {"version":"20.0.0"}
+2026-09-13T16:08:05.6882183Z Juice Shop is up after 3s
+2026-09-13T16:08:05.7187695Z {"version":"20.0.0"}
 ```
+
+The run fired on `pull_request` inside my fork. The same workflow is present on the submission PR to the course repository, but Actions there requires a maintainer to approve workflow runs from a first-time fork contributor, so no run is recorded on that PR yet.
