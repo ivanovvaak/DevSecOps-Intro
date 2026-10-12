@@ -1,0 +1,64 @@
+# Lab 9 custom rules.
+# Loaded from /etc/falco/rules.d/, which is mounted read-only into the container:
+# edit here on the host, then `docker kill --signal=SIGHUP falco`.
+
+- rule: Write to tmp in container
+  desc: >
+    A file under /tmp was opened for writing from inside a container. /tmp is the
+    usual landing zone for a dropped payload: it is world-writable, it survives
+    just long enough to execute, and it is excluded from most image-integrity
+    checks. On a container with a read-only root filesystem (Lab 7) this should
+    not happen at all outside the volumes we mounted on purpose.
+  condition: >
+    open_write
+    and container.id != host
+    and fd.name startswith /tmp/
+  output: >
+    File written under /tmp inside a container
+    (file=%fd.name container=%container.name image=%container.image.repository:%container.image.tag
+     user=%user.name uid=%user.uid process=%proc.name cmdline=%proc.cmdline)
+  priority: WARNING
+  tags: [container, drift]
+
+- list: mining_pool_ports
+  items: [3333, 4444, 5555, 7777, 14444]
+
+- list: suspect_network_binaries
+  items: [xmrig, minerd, cpuminer, ccminer, cgminer, nheqminer, xmr-stak, nc, ncat, netcat, curl, wget]
+
+# Known pool endpoints, the IOC half of the detection. In production this list is
+# fed from threat intel; here it carries the lab's own test destination.
+- list: known_pool_endpoints
+  items: ["127.0.0.1:3333"]
+
+- macro: pool_port_contacted
+  # Two cases that need different fields, because a connect() that never
+  # completes has no socket to read a port from:
+  #   established -> the fd has a peer, so fd.sport carries the server port
+  #   refused     -> fd.name is 0.0.0.0:0 and fd.sport is <NA>; the only record
+  #                  of the intended destination is the connect() argument.
+  # evt.arg.addr is a typed field: `=` and `in` work on it, while `contains`,
+  # `endswith` and `regex` are rejected at rule-compile time.
+  condition: (fd.sport in (mining_pool_ports) or evt.arg.addr in (known_pool_endpoints))
+
+- rule: Cryptomining connection from container
+  desc: >
+    A process inside a container attempted an outbound connection to a port
+    commonly used by mining pools, and the process is one that has no business
+    opening arbitrary sockets from this image. Either signal alone is noisy:
+    port 4444 is used by plenty of legitimate software, and curl exists in half
+    the images on earth. Together they are the shape of the Tesla incident --
+    an exposed workload quietly joined a pool and nobody looked at egress.
+  condition: >
+    evt.type = connect
+    and evt.dir = <
+    and container.id != host
+    and proc.name in (suspect_network_binaries)
+    and pool_port_contacted
+  output: >
+    Possible cryptomining connection from a container
+    (container=%container.name image=%container.image.repository:%container.image.tag
+     process=%proc.name cmdline=%proc.cmdline user=%user.name
+     destination=%evt.arg.addr result=%evt.res)
+  priority: CRITICAL
+  tags: [container, mitre_command_and_control, T1496, cryptomining]
